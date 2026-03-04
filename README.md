@@ -1,0 +1,1 @@
+Solutions to my Exercism Problems. Using this to back up my Racket solutions locally and track progress perhaps. If you are seeing this I hope you are enjoying learning Racket because I most certainly am not. 
