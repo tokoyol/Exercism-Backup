@@ -1,0 +1,88 @@
+name: Merge Exercism PRs & Report
+
+on:
+  schedule:
+    - cron: '0 13 * * *'  # 10pm JST (UTC+9)
+  workflow_dispatch:       # allow manual runs
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  merge-and-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge all exercism-sync PRs and report to Discord
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Fetch all open PRs from the exercism bot
+          prs=$(gh pr list \
+            --repo "$REPO" \
+            --state open \
+            --json number,title,headRefName \
+            --jq '.[] | select(.headRefName | startswith("exercism-sync/"))')
+
+          if [ -z "$prs" ]; then
+            echo "No exercism PRs to merge."
+            exit 0
+          fi
+
+          merged=()
+          failed=()
+
+          while IFS= read -r pr; do
+            number=$(echo "$pr" | jq -r '.number')
+            title=$(echo "$pr" | jq -r '.title')
+            # Extract "language/exercise" from "[Sync Iteration] language/exercise/N"
+            exercise=$(echo "$title" | sed 's/\[Sync Iteration\] //' | sed 's|/[^/]*$||')
+
+            if gh pr merge "$number" --repo "$REPO" --squash --delete-branch; then
+              merged+=("$exercise")
+            else
+              failed+=("$exercise (PR #$number)")
+            fi
+          done <<< "$(echo "$prs" | jq -c '.')"
+
+          count=${#merged[@]}
+
+          if [ "$count" -eq 0 ]; then
+            echo "No PRs were merged successfully."
+            exit 0
+          fi
+
+          # Build the exercise list for Discord
+          list=""
+          for ex in "${merged[@]}"; do
+            list="${list}\n• ${ex}"
+          done
+
+          # Build failed section if any
+          failed_section=""
+          if [ ${#failed[@]} -gt 0 ]; then
+            failed_list=""
+            for f in "${failed[@]}"; do
+              failed_list="${failed_list}\n• ${f}"
+            done
+            failed_section="\n\n⚠️ **Failed to merge:**${failed_list}"
+          fi
+
+          # Post to Discord
+          payload=$(jq -n \
+            --arg count "$count" \
+            --arg list "$list" \
+            --arg failed "$failed_section" \
+            '{
+              embeds: [{
+                title: ("✅ Exercism — " + $count + " exercise(s) merged today"),
+                description: ($list + $failed),
+                color: 5763719
+              }]
+            }')
+
+          curl -s -X POST "$DISCORD_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "$payload"
