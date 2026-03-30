@@ -57,7 +57,7 @@ jobs:
           # Build the exercise list for Discord
           list=""
           for ex in "${merged[@]}"; do
-            list="${list}\n• ${ex}"
+            list="${list}"$'\n'"• ${ex}"
           done
 
           # Build failed section if any
@@ -65,9 +65,9 @@ jobs:
           if [ ${#failed[@]} -gt 0 ]; then
             failed_list=""
             for f in "${failed[@]}"; do
-              failed_list="${failed_list}\n• ${f}"
+              failed_list="${failed_list}"$'\n'"• ${f}"
             done
-            failed_section="\n\n⚠️ **Failed to merge:**${failed_list}"
+            failed_section=$'\n\n'"⚠️ **Failed to merge:**${failed_list}"
           fi
 
           # Post to Discord
